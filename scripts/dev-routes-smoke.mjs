@@ -294,6 +294,16 @@ try {
   const origin = `http://127.0.0.1:${port}`
   step('mount signed routes on a node http server', true, `127.0.0.1:${port}`)
 
+  // fence: DSH Desktop 0.2.x forwards through the authenticated Host proxy, stripping
+  // Origin / Sec-Fetch-Site and attaching the Host cookie. Keep these cases before the
+  // stream checks so they do not depend on a working serve-sim stream.
+  const noOriginDevices = await postRoute(origin, DEVICES_ROUTE_PATH, JSON.stringify({}))
+  step('devices listing shares the trusted fence → 403 without Origin', noOriginDevices.status === 403, `HTTP ${noOriginDevices.status}`)
+  const proxyDevices = await postRoute(origin, DEVICES_ROUTE_PATH, JSON.stringify({}), { headers: { cookie: 'session=desktop' } })
+  step('devices listing accepts the Desktop proxy shape (cookie, no Origin)', proxyDevices.status === 200, `HTTP ${proxyDevices.status}`)
+  const crossSiteProxyDevices = await postRoute(origin, DEVICES_ROUTE_PATH, JSON.stringify({}), { headers: { cookie: 'session=desktop', 'sec-fetch-site': 'cross-site' } })
+  step('Desktop proxy shape still rejects cross-site fetch metadata', crossSiteProxyDevices.status === 403, `HTTP ${crossSiteProxyDevices.status}`)
+
   // ── 3. grant a stream capability ──────────────────────────────────────────
   const grantResponse = await fetch(`${origin}${GRANT_ROUTE_PATH}`, {
     method: 'POST',
@@ -455,9 +465,6 @@ try {
   step('switch-device unknown device → 409', unknownSwitch.status === 409, `HTTP ${unknownSwitch.status}`)
 
   // devices listing: shape + booted-first + runtime descending + cap.
-  const noOriginDevices = await postRoute(origin, DEVICES_ROUTE_PATH, JSON.stringify({}))
-  step('devices listing shares the trusted fence → 403 without Origin', noOriginDevices.status === 403, `HTTP ${noOriginDevices.status}`)
-
   const devicesResponse = await postRoute(origin, DEVICES_ROUTE_PATH, JSON.stringify({}), { headers: { origin } })
   const devicesBody = await devicesResponse.json().catch(() => ({}))
   const devicesList = Array.isArray(devicesBody.devices) ? devicesBody.devices : []

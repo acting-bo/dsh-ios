@@ -460,11 +460,28 @@ function isTrustedBrowserRequest(req: IncomingMessage, requireOrigin: boolean): 
 }
 
 /**
+ * DSH Desktop 0.2.x serves the application from `dsh-app://app` and forwards its HTTP
+ * requests through the authenticated Host: `forwardWebRequest` deletes Origin and
+ * Fetch Metadata and attaches the Host session cookie. That loopback proxy is a trusted
+ * browser even though it cannot carry the original Origin, so mutation routes accept the
+ * proxy shape while a browser cross-site request (which always carries these headers)
+ * stays rejected.
+ */
+function isDesktopProxyRequest(req: IncomingMessage): boolean {
+  return req.headers.origin === undefined
+    && req.headers['sec-fetch-site'] === undefined
+    && typeof req.headers.cookie === 'string'
+    && req.headers.cookie.length > 0
+}
+
+/**
  * The transport fence applied to every dsh-ios route (mirrors dsh-noema's
  * status route: loopback peer + loopback Host, plus Fetch-Metadata/Origin).
  */
 function isTrustedRequest(req: IncomingMessage, requireOrigin: boolean): boolean {
-  return isLoopbackRequest(req) && isTrustedBrowserRequest(req, requireOrigin)
+  if (!isLoopbackRequest(req)) return false
+  if (requireOrigin && isDesktopProxyRequest(req)) return true
+  return isTrustedBrowserRequest(req, requireOrigin)
 }
 
 function isJsonRequest(req: IncomingMessage): boolean {
